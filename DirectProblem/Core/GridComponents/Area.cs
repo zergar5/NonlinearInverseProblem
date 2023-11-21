@@ -1,6 +1,4 @@
-﻿using DirectProblem.SLAE;
-
-namespace DirectProblem.Core.GridComponents;
+﻿namespace DirectProblem.Core.GridComponents;
 
 public class Area
 {

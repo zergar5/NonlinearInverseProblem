@@ -1,23 +1,24 @@
 ﻿using DirectProblem;
+using DirectProblem.Core.Base;
 using DirectProblem.Core.GridComponents;
+using DirectProblem.FEM;
 using DirectProblem.GridGenerator;
 using DirectProblem.GridGenerator.Intervals.Splitting;
+using DirectProblem.TwoDimensional;
 using DirectProblem.TwoDimensional.Assembling.Boundary;
-using System.Globalization;
-using DirectProblem.Core.Base;
-using DirectProblem.FEM;
+using DirectProblem.TwoDimensional.Assembling.Local;
 using InverseProblem;
 using InverseProblem.Assembling;
-using DirectProblem.TwoDimensional.Assembling.Local;
-using DirectProblem.TwoDimensional;
-using Microsoft.VisualBasic;
+using System.Globalization;
 
 Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
 //24800
-var rBorder = 24800d;
+var rBorder = 1500d;
+var rSplitter = 150;
 //-150
-var zBorder = -150d;
+var zBorder = -113d;
+var zSplitter = 93;
 
 var trueRPoints = new[] { 0d, rBorder };
 var trueZPoints = new[] { zBorder, -20d, 0d };
@@ -34,13 +35,13 @@ var gridBuilder2D = new GridBuilder2D();
 var trueGrid = gridBuilder2D
     .SetRAxis(new AxisSplitParameter(
             trueRPoints,
-            new UniformSplitter(2480)
+            new UniformSplitter(rSplitter)
         )
     )
     .SetZAxis(new AxisSplitParameter(
             trueZPoints,
             new UniformSplitter(20),
-            new UniformSplitter(130)
+            new UniformSplitter(zSplitter)
         )
     )
     .SetAreas(trueAreas)
@@ -84,21 +85,27 @@ var femSolution = new FEMSolution(trueGrid, solution,
 //var newptentialM = ptentialM;
 //var newptentialN = ptentialN;
 
+//Console.Write($" Border: r: {rBorder} z: {zBorder}, potential: {newptentialM}                                 \r");
+
 //do
 //{
 //    ptentialM = newptentialM;
 //    ptentialN = newptentialN;
 
-//    zBorder -= 10;
+//    //rBorder += 100d;
+//    //rSplitter += 10;
+
+//    zBorder -= 10d;
+//    zSplitter += 100;
 
 //    trueRPoints = new[] { 0d, rBorder };
 //    trueZPoints = new[] { zBorder, -20d, 0d };
 
 //    trueAreas = new Area[]
 //    {
-//    new(0, new Node2D(trueRPoints[0], trueZPoints[^2]),
+//        new(0, new Node2D(trueRPoints[0], trueZPoints[^2]),
 //        new Node2D(trueRPoints[1], trueZPoints[^1])),
-//    new(1, new Node2D(trueRPoints[0], trueZPoints[^3]),
+//        new(1, new Node2D(trueRPoints[0], trueZPoints[^3]),
 //        new Node2D(trueRPoints[1], trueZPoints[^2]))
 //    };
 
@@ -106,19 +113,23 @@ var femSolution = new FEMSolution(trueGrid, solution,
 //    trueGrid = gridBuilder2D
 //        .SetRAxis(new AxisSplitParameter(
 //                trueRPoints,
-//                new UniformSplitter(200)
+//                new UniformSplitter(rSplitter)
 //            )
 //        )
 //        .SetZAxis(new AxisSplitParameter(
 //                trueZPoints,
 //                new UniformSplitter(20),
-//                new UniformSplitter(200)
+//                new UniformSplitter(zSplitter)
 //            )
 //        )
 //        .SetAreas(trueAreas)
 //        .Build();
 
-//    directProblemSolver = new DirectProblemSolver();
+//    firstBoundaryProvider = new FirstBoundaryProvider(trueGrid);
+
+//    firstConditions =
+//        firstBoundaryProvider.GetConditions(trueGrid.ElementsByLength, trueGrid.ElementsByHeight);
+
 //    solution = directProblemSolver
 //        .SetGrid(trueGrid)
 //        .SetMaterials(trueSigmas)
@@ -135,7 +146,7 @@ var femSolution = new FEMSolution(trueGrid, solution,
 //    newptentialM = femSolution.CalculatePotential(new Node2D(dstanceSourceM, 0));
 //    newptentialN = femSolution.CalculatePotential(new Node2D(dstanceSourceN, 0));
 
-//    Console.Write($" Border: {zBorder}, potential: {newptentialM}                                   \r");
+//    Console.Write($" Border: r: {rBorder} z: {zBorder}, potential: {newptentialM}                                 \r");
 
 //} while (true);
 
@@ -163,7 +174,7 @@ for (var i = 0; i < receiversLines.Length; i++)
 }
 
 var rPoints = new[] { 0d, rBorder };
-var zPoints = new[] { zBorder, -20d, 0d };
+var zPoints = new[] { zBorder, -18d, 0d };
 
 var areas = new Area[]
 {
@@ -173,7 +184,7 @@ var areas = new Area[]
         new Node2D(rPoints[1], zPoints[^2]))
 };
 
-var sigmas = new[] { 0.1d, 0.1d };
+var sigmas = new[] { 0.001d, 0.1d };
 
 var source = new SourcesLine(new Node2D(0d, 0d), new Node2D(100d, 0d), 1d);
 
@@ -185,7 +196,7 @@ var targetParameters = new Parameter[]
 };
 
 var trueValues = new Vector(new[] { -20d, 0.01d });
-var initialValues = new Vector(new[] { -20d, 0.1d });
+var initialValues = new Vector(new[] { -19d, 0.002d });
 
 var inverseProblemSolver = new InverseProblemSolver(gridBuilder2D);
 

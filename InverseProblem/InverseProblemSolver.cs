@@ -86,8 +86,8 @@ public class InverseProblemSolver
 
     private void Init()
     {
-        _slaeAssembler = new SLAEAssembler(_gridBuilder2D, DirectProblemSolver, _sourceLine, _receiversLines, 
-            _parameters, _initialValues, _truePotentialDifferences, _rPoints, _zPoints, _areas, _sigmas, 
+        _slaeAssembler = new SLAEAssembler(_gridBuilder2D, DirectProblemSolver, _sourceLine, _receiversLines,
+            _parameters, _initialValues, _truePotentialDifferences, _rPoints, _zPoints, _areas, _sigmas,
             _firstConditions);
 
         _bufferMatrix = Matrix.CreateIdentityMatrix(_parameters.Length);

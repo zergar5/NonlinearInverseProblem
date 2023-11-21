@@ -16,7 +16,7 @@ namespace InverseProblem.Assembling;
 public class SLAEAssembler
 {
     private static readonly LinearFunctionsProvider LinearFunctionsProvider = new();
-    public const double Delta = 1e-4;
+    public const double Delta = 1e-3;
 
     private readonly GridBuilder2D _gridBuilder2D;
     private readonly DirectProblemSolver _directProblemSolver;
@@ -137,13 +137,13 @@ public class SLAEAssembler
         _grid = _gridBuilder2D
             .SetRAxis(new AxisSplitParameter(
                     _rPoints,
-                    new UniformSplitter(2480)
+                    new UniformSplitter(150)
                 )
             )
             .SetZAxis(new AxisSplitParameter(
                     _zPoints,
                     new UniformSplitter(20),
-                    new UniformSplitter(130)
+                    new UniformSplitter(93)
                 )
             )
             .SetAreas(new Area[]

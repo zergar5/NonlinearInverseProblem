@@ -1,6 +1,5 @@
 ﻿using DirectProblem.Core.Base;
 using DirectProblem.Core.Global;
-using DirectProblem.FEM;
 using DirectProblem.SLAE.Preconditions;
 
 namespace DirectProblem.SLAE.Solvers;
@@ -22,6 +21,9 @@ public class MCG
     public MCG SetPrecondition(SymmetricSparseMatrix preconditionMatrix)
     {
         _preconditionMatrix = preconditionMatrix;
+        //_r = new Vector(_preconditionMatrix.Count);
+        //_z = new Vector(_preconditionMatrix.Count);
+
         return this;
     }
 
