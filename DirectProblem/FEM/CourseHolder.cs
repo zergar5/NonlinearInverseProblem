@@ -6,7 +6,7 @@ public class CourseHolder
 {
     public static void GetInfo(int iteration, double residual)
     {
-        Console.Write($"Iteration: {iteration}, residual: {residual:E14}                                   \r");
+        Console.Write($"Iteration: {iteration}, residual: {residual:E14}                                   \n");
     }
 
     public static void WriteSolution(Node2D point, double value)

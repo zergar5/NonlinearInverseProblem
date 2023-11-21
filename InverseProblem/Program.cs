@@ -152,6 +152,8 @@ var femSolution = new FEMSolution(trueGrid, solution,
 
 //return 0;
 
+var noise = 1.05d;
+
 for (var i = 0; i < receiversLines.Length; i++)
 {
     var distanceSourceM = Node2D.Distance(trueSourcesLine.PointA, receiversLines[i].PointM);
@@ -170,11 +172,11 @@ for (var i = 0; i < receiversLines.Length; i++)
 
     var potentialDifferenceBMN = potentialM - potentialN;
 
-    truePotentialDifferences[i] = potentialDifferenceAMN + potentialDifferenceBMN;
+    truePotentialDifferences[i] = noise * (potentialDifferenceAMN + potentialDifferenceBMN);
 }
 
 var rPoints = new[] { 0d, rBorder };
-var zPoints = new[] { zBorder, -18d, 0d };
+var zPoints = new[] { zBorder, -19d, 0d };
 
 var areas = new Area[]
 {
@@ -184,19 +186,18 @@ var areas = new Area[]
         new Node2D(rPoints[1], zPoints[^2]))
 };
 
-var sigmas = new[] { 0.001d, 0.1d };
+var sigmas = new[] { 0.01d, 0.04d };
 
 var source = new SourcesLine(new Node2D(0d, 0d), new Node2D(100d, 0d), 1d);
 
 var targetParameters = new Parameter[]
 {
     new (ParameterType.HorizontalBound, 1),
-    new (ParameterType.Sigma, 0),
-    //new (ParameterType.Sigma, 1),
+    new (ParameterType.Sigma, 1),
 };
 
-var trueValues = new Vector(new[] { -20d, 0.01d });
-var initialValues = new Vector(new[] { -19d, 0.002d });
+var trueValues = new Vector(new[] { -20d, 0.1d });
+var initialValues = new Vector(new[] { -19d, 0.04d });
 
 var inverseProblemSolver = new InverseProblemSolver(gridBuilder2D);
 
