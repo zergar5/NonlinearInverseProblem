@@ -69,7 +69,7 @@ public class GlobalAssembler<TNode>
 
         for (var i = 0; i < element.NodesIndexes.Length; i++)
         {
-            _bufferVector[i] = sources.Current * basisFunctions[i].Calculate(sources.PointA);
+            _bufferVector[i] = sources.Current / (2 * Math.PI) * basisFunctions[i].Calculate(sources.PointA);
         }
 
         _inserter.InsertVector(_equation.RightPart, new LocalVector(element.NodesIndexes, _bufferVector));

@@ -119,7 +119,7 @@ public class Regularizer
             {
                 alpha *= 1.5;
             }
-        } while (ratio is < 1.999d or > 3d);
+        } while (ratio is <= 2d or >= 3d);
 
         return alpha / 1.5;
     }
