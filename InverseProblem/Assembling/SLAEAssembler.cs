@@ -1,12 +1,8 @@
 ﻿using DirectProblem;
 using DirectProblem.Core;
 using DirectProblem.Core.Base;
-using DirectProblem.Core.Boundary;
 using DirectProblem.Core.Global;
 using DirectProblem.Core.GridComponents;
-using DirectProblem.FEM;
-using DirectProblem.GridGenerator;
-using DirectProblem.GridGenerator.Intervals.Splitting;
 using DirectProblem.TwoDimensional;
 using DirectProblem.TwoDimensional.Assembling.Local;
 using Vector = DirectProblem.Core.Base.Vector;
@@ -15,244 +11,205 @@ namespace InverseProblem.Assembling;
 
 public class SLAEAssembler
 {
-    private static readonly LinearFunctionsProvider LinearFunctionsProvider = new();
-    public const double Delta = 1e-3;
+    private readonly DirectProblemSolver[] _directProblemSolver;
+    private readonly LocalBasisFunctionsProvider[] _localBasisFunctionsProvider;
 
-    private readonly GridBuilder2D _gridBuilder2D;
-    private readonly DirectProblemSolver _directProblemSolver;
-
-    private readonly SourcesLine _sourcesLine;
-    private readonly ReceiversLine[] _receiversLines;
+    private readonly ParametersCollection[] _parametersCollection;
+    private Source _source;
+    private readonly Node2D[] _receivers;
     private readonly Parameter[] _parameters;
-    private readonly double[] _truePotentialDifferences;
+    private readonly double[] _trueFieldValues;
     private double[] _weightsSquares;
-    private readonly double[] _potentialDifferences;
-    private readonly double[][] _derivativesPotentialDifferences;
-
-    private double[] _rPoints;
-    private double[] _zPoints;
-    private Area[] _areas;
-    private double[] _sigmas;
-    private FirstCondition[] _firstConditions;
-
+    private double[] _fieldValues;
+    private readonly double[,] _fieldValuesDerivatives;
     private readonly Equation<Matrix> _equation;
 
     private Grid<Node2D> _grid;
-    private LocalBasisFunctionsProvider _localBasisFunctionsProvider;
-    private FEMSolution _femSolution;
+
+    private readonly Task[] _tasks;
 
     public SLAEAssembler
     (
-        GridBuilder2D gridBuilder2D,
-        DirectProblemSolver directProblemSolver,
-        SourcesLine sourcesLine,
-        ReceiversLine[] receiversLines,
+        DirectProblemSolver[] directProblemSolver,
+        LocalBasisFunctionsProvider[] localBasisFunctionsProvider,
+        ParametersCollection[] parametersCollection,
+        Source source,
+        Node2D[] receivers,
         Parameter[] parameters,
         Vector initialValues,
-        double[] truePotentialDifferences,
-        double[] rPoints,
-        double[] zPoints,
-        Area[] areas,
-        double[] sigmas,
-        FirstCondition[] firstConditions
+        double[] trueFieldValues
     )
     {
-        _gridBuilder2D = gridBuilder2D;
         _directProblemSolver = directProblemSolver;
-        _sourcesLine = sourcesLine;
-        _receiversLines = receiversLines;
+        _localBasisFunctionsProvider = localBasisFunctionsProvider;
+
+        _parametersCollection = parametersCollection;
+        _source = source;
+        _receivers = receivers;
         _parameters = parameters;
-        _truePotentialDifferences = truePotentialDifferences;
-        _rPoints = rPoints;
-        _zPoints = zPoints;
-        _areas = areas;
-        _sigmas = sigmas;
-        _firstConditions = firstConditions;
+        _trueFieldValues = trueFieldValues;
 
-        CalculateWeights();
+        _equation = new Equation<Matrix>(new Matrix(_parameters.Length), initialValues,
+            new Vector(_parameters.Length));
 
-        _equation = new Equation<Matrix>(new Matrix(parameters.Length), initialValues,
-            new Vector(parameters.Length));
+        _fieldValues = new double[_receivers.Length];
 
-        _potentialDifferences = new double[_receiversLines.Length];
-        _derivativesPotentialDifferences = new double[parameters.Length][];
+        _fieldValuesDerivatives = new double[_parameters.Length, _receivers.Length];
 
-        for (var i = 0; i < parameters.Length; i++)
-        {
-            _derivativesPotentialDifferences[i] = new double[_receiversLines.Length];
-        }
+        _tasks = new Task[directProblemSolver.Length];
     }
 
-    public void SetParameter(Parameter parameter, double value)
+    public SLAEAssembler SetGrid(Grid<Node2D> grid)
     {
-        if (parameter.ParameterType == ParameterType.HorizontalBound)
-        {
-            _zPoints[parameter.Index] = value;
-        }
-        else if (parameter.ParameterType == ParameterType.VerticalBound)
-        {
-            _rPoints[parameter.Index] = value;
-        }
-        else
-        {
-            _sigmas[parameter.Index] = value;
-        }
+        _grid = grid;
+
+        return this;
     }
 
-    public double GetParameter(Parameter parameter)
+    public SLAEAssembler SetWeightsSquares(double[] weightsSquares)
     {
-        return parameter.ParameterType switch
-        {
-            ParameterType.HorizontalBound => _zPoints[parameter.Index],
-            ParameterType.VerticalBound => _rPoints[parameter.Index],
-            _ => _sigmas[parameter.Index]
-        };
+        _weightsSquares = weightsSquares;
+
+        return this;
+    }
+
+    public SLAEAssembler SetCurrentFieldValues(double[] fieldValues)
+    {
+        _fieldValues = fieldValues;
+
+        return this;
     }
 
     public Equation<Matrix> BuildEquation()
     {
-        AssembleSLAE();
+        CalculatePhaseDifferences();
+        AssembleMatrix();
+        AssembleRightPart();
+
         return _equation;
     }
 
-    private void CalculateWeights()
+    private void ChangeMaterials(int solverId)
     {
-        _weightsSquares = new double[_truePotentialDifferences.Length];
-
-        for (var i = 0; i < _receiversLines.Length; i++)
-        {
-            _weightsSquares[i] = Math.Pow(1d / _truePotentialDifferences[i], 2);
-        }
+        _directProblemSolver[solverId].SetMaterials(_parametersCollection[solverId].Materials);
     }
 
-    private void AssembleSLAE()
+    private void ChangeSourcePower(int solverId, double current)
     {
-        CalculatePotentialDifferences();
-        AssembleMatrix();
-        AssembleRightPart();
+        _source.Current = current;
+        _directProblemSolver[solverId].SetSource(_source);
     }
 
-    private void AssembleDirectProblem()
+    private FEMSolution SolveDirectProblem(int solverId)
     {
-        _grid = _gridBuilder2D
-            .SetRAxis(new AxisSplitParameter(
-                    _rPoints,
-                    new UniformSplitter(150)
-                )
-            )
-            .SetZAxis(new AxisSplitParameter(
-                    _zPoints,
-                    new UniformSplitter(20),
-                    new UniformSplitter(93)
-                )
-            )
-            .SetAreas(new Area[]
-            {
-                new(0, new Node2D(_rPoints[0], _zPoints[^2]),
-                    new Node2D(_rPoints[1], _zPoints[^1])),
-                new(1, new Node2D(_rPoints[0], _zPoints[^3]),
-                    new Node2D(_rPoints[1], _zPoints[^2]))
-            })
-            .Build();
+        var solution = _directProblemSolver[solverId].AssembleSLAE().Solve();
 
-        _localBasisFunctionsProvider = new LocalBasisFunctionsProvider(_grid, LinearFunctionsProvider);
-
-        _directProblemSolver
-            .SetGrid(_grid)
-            .SetMaterials(_sigmas)
-            .SetSource(_sourcesLine)
-            .SetFirstConditions(_firstConditions);
-    }
-
-    private void SolveDirectProblem()
-    {
-        var solution = _directProblemSolver.Solve();
-
-        _femSolution = new FEMSolution(_grid, solution, _localBasisFunctionsProvider);
+        return new FEMSolution(_grid, solution, _localBasisFunctionsProvider[solverId]);
     }
 
     private void AssembleMatrix()
     {
-        for (var q = 0; q < _equation.Matrix.CountRows; q++)
+        Parallel.For(0, _equation.Matrix.CountRows, q =>
         {
             for (var s = 0; s < _equation.Matrix.CountColumns; s++)
             {
-                _equation.Matrix[q, s] = 0;
+                var sum = 0d;
 
-                for (var i = 0; i < _receiversLines.Length; i++)
+                for (var k = 0; k < _receivers.Length; k++)
                 {
-                    _equation.Matrix[q, s] += _weightsSquares[i] * _derivativesPotentialDifferences[q][i] *
-                                              _derivativesPotentialDifferences[s][i];
+                    sum += _weightsSquares[k] * _fieldValuesDerivatives[q, k] *
+                                              _fieldValuesDerivatives[s, k];
                 }
+
+                _equation.Matrix[q, s] = sum;
             }
-        }
+        });
     }
 
     private void AssembleRightPart()
     {
-        for (var q = 0; q < _equation.Matrix.CountRows; q++)
+        Parallel.For(0, _equation.Matrix.CountRows, q =>
         {
-            _equation.RightPart[q] = 0;
+            var sum = 0d;
 
-            for (var i = 0; i < _receiversLines.Length; i++)
+            for (var k = 0; k < _receivers.Length; k++)
             {
-                _equation.RightPart[q] -= _weightsSquares[i] *
-                                          (_potentialDifferences[i] - _truePotentialDifferences[i]) *
-                                          _derivativesPotentialDifferences[q][i];
+                sum -= _weightsSquares[k] *
+                       (_fieldValues[k] - _trueFieldValues[k]) *
+                       _fieldValuesDerivatives[q, k];
             }
-        }
+
+            _equation.RightPart[q] = sum;
+        });
     }
 
-    private void CalculatePotentialDifferences()
+    private void CalculatePhaseDifferences()
     {
-        // посчитать МКЭ
-        AssembleDirectProblem();
-        SolveDirectProblem();
-
-        CalculatePotentialDifference(_potentialDifferences);
-
-        // посчитать все производные
         for (var i = 0; i < _parameters.Length; i++)
         {
-            var parameterValue = GetParameter(_parameters[i]);
-            SetParameter(_parameters[i], parameterValue + Delta);
+            var taskId = i % _tasks.Length;
 
-            AssembleDirectProblem();
-            SolveDirectProblem();
-
-            CalculatePotentialDifference(_derivativesPotentialDifferences[i]);
-
-            SetParameter(_parameters[i], parameterValue);
-
-            for (var j = 0; j < _receiversLines.Length; j++)
+            if (i >= _tasks.Length)
             {
-                _derivativesPotentialDifferences[i][j] =
-                    (_derivativesPotentialDifferences[i][j] - _potentialDifferences[j]) / Delta;
+                taskId = Task.WaitAny(_tasks);
             }
+
+            var task = new Task(j =>
+            {
+                var currentParameter = _parameters[(int)j];
+                var parameterValue = _parametersCollection[taskId].GetParameterValue(currentParameter);
+                var delta = parameterValue * 5e-2;
+                _parametersCollection[taskId].SetParameterValue(_parameters[(int)j], parameterValue + delta);
+
+                switch (currentParameter.ParameterType)
+                {
+                    case ParameterType.Current:
+                        ChangeSourcePower(taskId, _parametersCollection[taskId].GetParameterValue(currentParameter));
+                        break;
+                    case ParameterType.Sigma:
+                        ChangeMaterials(taskId);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+
+                CalculateFieldValueDerivatives((int)j, delta, taskId);
+
+                _parametersCollection[taskId].SetParameterValue(_parameters[(int)j], parameterValue);
+
+                if (currentParameter.ParameterType == ParameterType.Current)
+                {
+                    ChangeSourcePower(taskId, parameterValue);
+                }
+                else
+                {
+                    ChangeMaterials(taskId);
+                }
+
+            }, i);
+
+            task.Start();
+
+            _tasks[taskId] = task;
         }
+
+        Task.WaitAll(_tasks);
     }
 
-    private void CalculatePotentialDifference(double[] potentialDifferences)
+    private void CalculateFieldValueDerivatives(int parameterIndex, double delta, int solverId)
     {
-        for (var i = 0; i < _receiversLines.Length; i++)
+        var femSolution = SolveDirectProblem(solverId);
+
+        for (var i = 0; i < _receivers.Length; i++)
         {
-            var distanceSourceM = Node2D.Distance(_sourcesLine.PointA, _receiversLines[i].PointM);
-            var distanceSourceN = Node2D.Distance(_sourcesLine.PointA, _receiversLines[i].PointN);
+            var field = femSolution.Calculate(_receivers[i]);
 
-            var potentialM = _femSolution.CalculatePotential(new Node2D(distanceSourceM, 0));
-            var potentialN = _femSolution.CalculatePotential(new Node2D(distanceSourceN, 0));
+            _fieldValuesDerivatives[parameterIndex, i] = field;
 
-            var potentialDifferenceAMN = potentialM - potentialN;
+            _fieldValuesDerivatives[parameterIndex, i] =
+                (_fieldValuesDerivatives[parameterIndex, i] - _fieldValues[i]) / delta;
 
-            distanceSourceM = Node2D.Distance(_sourcesLine.PointB, _receiversLines[i].PointM);
-            distanceSourceN = Node2D.Distance(_sourcesLine.PointB, _receiversLines[i].PointN);
-
-            potentialM = -_femSolution.CalculatePotential(new Node2D(distanceSourceM, 0));
-            potentialN = -_femSolution.CalculatePotential(new Node2D(distanceSourceN, 0));
-
-            var potentialDifferenceBMN = potentialM - potentialN;
-
-            potentialDifferences[i] = potentialDifferenceAMN + potentialDifferenceBMN;
+            //Console.Write($"derivative {parameterIndex} receiver {i}                              \r");
         }
     }
 }

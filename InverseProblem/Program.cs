@@ -1,215 +1,144 @@
 ﻿using DirectProblem;
-using DirectProblem.Core.Base;
 using DirectProblem.Core.GridComponents;
-using DirectProblem.FEM;
 using DirectProblem.GridGenerator;
-using DirectProblem.GridGenerator.Intervals.Splitting;
 using DirectProblem.TwoDimensional;
-using DirectProblem.TwoDimensional.Assembling.Boundary;
 using DirectProblem.TwoDimensional.Assembling.Local;
 using InverseProblem;
 using InverseProblem.Assembling;
+using InverseProblem.SLAE;
+using System.Diagnostics;
 using System.Globalization;
+using DirectProblem.GridGenerator.Intervals.Splitting;
+using Vector = DirectProblem.Core.Base.Vector;
 
 Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-//24800
-var rBorder = 1500d;
-var rSplitter = 150;
-//-150
-var zBorder = -113d;
-var zSplitter = 93;
+var gridBuilder = new GridBuilder2D();
 
-var trueRPoints = new[] { 0d, rBorder };
-var trueZPoints = new[] { zBorder, -20d, 0d };
-
-var trueAreas = new Area[]
-{
-    new(0, new Node2D(trueRPoints[0], trueZPoints[^2]),
-        new Node2D(trueRPoints[1], trueZPoints[^1])),
-    new(1, new Node2D(trueRPoints[0], trueZPoints[^3]),
-        new Node2D(trueRPoints[1], trueZPoints[^2]))
-};
-
-var gridBuilder2D = new GridBuilder2D();
-var trueGrid = gridBuilder2D
+var trueGrid = gridBuilder
     .SetRAxis(new AxisSplitParameter(
-            trueRPoints,
-            new UniformSplitter(rSplitter)
+            [1e-4, 10d, 1000d],
+            new StepProportionalSplitter(1d, 1.05), 
+            new StepProportionalSplitter(2d, 1.05)
         )
     )
     .SetZAxis(new AxisSplitParameter(
-            trueZPoints,
-            new UniformSplitter(20),
-            new UniformSplitter(zSplitter)
+            [-1000d, -750d, -500d, -250d, 0d],
+        new StepProportionalSplitter(30d, 1 / 1.05),
+            new StepProportionalSplitter(20d, 1 / 1.05),
+            new StepProportionalSplitter(6d, 1 / 1.05),
+            new StepProportionalSplitter(1d, 1 / 1.05)
         )
     )
-    .SetAreas(trueAreas)
+    .SetAreas(new Area[]
+    {
+        new(0, new Node2D(1e-4, -250d), new Node2D(1000d, 0d)),
+        new(1, new Node2D(1e-4, -500d), new Node2D(1000d, -250d)),
+        new(2, new Node2D(1e-4, -750d), new Node2D(1000d, -500d)),
+        new(3, new Node2D(1e-4, -1000d), new Node2D(1000d, -750d)),
+    })
     .Build();
 
-var trueSigmas = new[] { 0.01d, 0.1d };
+var trueCurrent = 5d;
 
-var trueSourcesLine = new SourcesLine(new Node2D(0d, 0d), new Node2D(100d, 0d), 1d);
-
-var receiversLines = new ReceiversLine[]
+var trueMaterials = new Material[]
 {
-    new(new Node2D(200d, 0d), new Node2D(300d, 0d)),
-    new(new Node2D(500d, 0d), new Node2D(600d, 0d)),
-    new(new Node2D(1000d, 0d), new Node2D(1100d, 0d))
+    new(0.001),
+    new(0.1),
+    new(0.5),
+    new(0.01),
 };
 
-var truePotentialDifferences = new double[receiversLines.Length];
+var source = new Source(new Node2D(1e-4d, 0d), new Node2D(10d, 0d), trueCurrent);
+var receivers = new Node2D[2];
+var trueFieldValues = new double[receivers.Length];
+var noises = new double[receivers.Length];
+receivers[0] = new Node2D(30d, 0d);
+receivers[1] = new Node2D(60d, 0d);
+//receivers[2] = new Node2D(100d, 0d);
+noises[0] = 0.99d;
+noises[1] = 1d;
+//noises[2] = 1d;
 
-var firstBoundaryProvider = new FirstBoundaryProvider(trueGrid);
-
-var firstConditions =
-    firstBoundaryProvider.GetConditions(trueGrid.ElementsByLength, trueGrid.ElementsByHeight);
-
-var directProblemSolver = new DirectProblemSolver();
-var solution = directProblemSolver
-    .SetGrid(trueGrid)
-    .SetMaterials(trueSigmas)
-    .SetSource(trueSourcesLine)
-    .SetFirstConditions(firstConditions)
-    .Solve();
-
-var femSolution = new FEMSolution(trueGrid, solution,
-    new LocalBasisFunctionsProvider(trueGrid, new LinearFunctionsProvider()));
-
-//var dstanceSourceM = Node2D.Distance(trueSourcesLine.PointA, receiversLines[0].PointM);
-//var dstanceSourceN = Node2D.Distance(trueSourcesLine.PointA, receiversLines[0].PointN);
-
-//var ptentialM = femSolution.CalculatePotential(new Node2D(dstanceSourceM, 0));
-//var ptentialN = femSolution.CalculatePotential(new Node2D(dstanceSourceN, 0));
-
-//var newptentialM = ptentialM;
-//var newptentialN = ptentialN;
-
-//Console.Write($" Border: r: {rBorder} z: {zBorder}, potential: {newptentialM}                                 \r");
-
-//do
-//{
-//    ptentialM = newptentialM;
-//    ptentialN = newptentialN;
-
-//    //rBorder += 100d;
-//    //rSplitter += 10;
-
-//    zBorder -= 10d;
-//    zSplitter += 100;
-
-//    trueRPoints = new[] { 0d, rBorder };
-//    trueZPoints = new[] { zBorder, -20d, 0d };
-
-//    trueAreas = new Area[]
-//    {
-//        new(0, new Node2D(trueRPoints[0], trueZPoints[^2]),
-//        new Node2D(trueRPoints[1], trueZPoints[^1])),
-//        new(1, new Node2D(trueRPoints[0], trueZPoints[^3]),
-//        new Node2D(trueRPoints[1], trueZPoints[^2]))
-//    };
-
-//    gridBuilder2D = new GridBuilder2D();
-//    trueGrid = gridBuilder2D
-//        .SetRAxis(new AxisSplitParameter(
-//                trueRPoints,
-//                new UniformSplitter(rSplitter)
-//            )
-//        )
-//        .SetZAxis(new AxisSplitParameter(
-//                trueZPoints,
-//                new UniformSplitter(20),
-//                new UniformSplitter(zSplitter)
-//            )
-//        )
-//        .SetAreas(trueAreas)
-//        .Build();
-
-//    firstBoundaryProvider = new FirstBoundaryProvider(trueGrid);
-
-//    firstConditions =
-//        firstBoundaryProvider.GetConditions(trueGrid.ElementsByLength, trueGrid.ElementsByHeight);
-
-//    solution = directProblemSolver
-//        .SetGrid(trueGrid)
-//        .SetMaterials(trueSigmas)
-//        .SetSource(trueSourcesLine)
-//        .SetFirstConditions(firstConditions)
-//        .Solve();
-
-//    femSolution = new FEMSolution(trueGrid, solution,
-//        new LocalBasisFunctionsProvider(trueGrid, new LinearFunctionsProvider()));
-
-//    dstanceSourceM = Node2D.Distance(trueSourcesLine.PointA, receiversLines[0].PointM);
-//    dstanceSourceN = Node2D.Distance(trueSourcesLine.PointA, receiversLines[0].PointN);
-
-//    newptentialM = femSolution.CalculatePotential(new Node2D(dstanceSourceM, 0));
-//    newptentialN = femSolution.CalculatePotential(new Node2D(dstanceSourceN, 0));
-
-//    Console.Write($" Border: r: {rBorder} z: {zBorder}, potential: {newptentialM}                                 \r");
-
-//} while (true);
-
-//return 0;
-
-var noise = 1d;
-
-for (var i = 0; i < receiversLines.Length; i++)
-{
-    var distanceSourceM = Node2D.Distance(trueSourcesLine.PointA, receiversLines[i].PointM);
-    var distanceSourceN = Node2D.Distance(trueSourcesLine.PointA, receiversLines[i].PointN);
-
-    var potentialM = femSolution.CalculatePotential(new Node2D(distanceSourceM, 0));
-    var potentialN = femSolution.CalculatePotential(new Node2D(distanceSourceN, 0));
-
-    var potentialDifferenceAMN = potentialM - potentialN;
-
-    distanceSourceM = Node2D.Distance(trueSourcesLine.PointB, receiversLines[i].PointM);
-    distanceSourceN = Node2D.Distance(trueSourcesLine.PointB, receiversLines[i].PointN);
-
-    potentialM = -femSolution.CalculatePotential(new Node2D(distanceSourceM, 0));
-    potentialN = -femSolution.CalculatePotential(new Node2D(distanceSourceN, 0));
-
-    var potentialDifferenceBMN = potentialM - potentialN;
-
-    truePotentialDifferences[i] = noise * (potentialDifferenceAMN + potentialDifferenceBMN);
-}
-
-var rPoints = new[] { 0d, rBorder };
-var zPoints = new[] { zBorder, -20d, 0d };
-
-var areas = new Area[]
-{
-    new(0, new Node2D(rPoints[0], zPoints[^2]),
-        new Node2D(rPoints[1], zPoints[^1])),
-    new(1, new Node2D(rPoints[0], zPoints[^3]),
-        new Node2D(rPoints[1], zPoints[^2]))
-};
-
-var sigmas = new[] { 0.01d, 0.01d };
-
-var source = new SourcesLine(new Node2D(0d, 0d), new Node2D(100d, 0d), 1d);
+var maxThreads = 1;
 
 var targetParameters = new Parameter[]
 {
-    //new (ParameterType.HorizontalBound, 1),
-    new (ParameterType.Sigma, 1),
+    //new (ParameterType.Current, 0), 
+    new (ParameterType.Sigma, 2),
 };
 
-var trueValues = new Vector(new[] { 0.1d });
-var initialValues = new Vector(new[] { 0.01d });
+DirectProblemSolver[] directProblemSolvers;
+LocalBasisFunctionsProvider[] localBasisFunctionsProviders;
 
-var inverseProblemSolver = new InverseProblemSolver(gridBuilder2D);
+if (targetParameters.Length < maxThreads)
+{
+    directProblemSolvers = new DirectProblemSolver[targetParameters.Length];
+    localBasisFunctionsProviders = new LocalBasisFunctionsProvider[targetParameters.Length];
+}
+else
+{
+    directProblemSolvers = new DirectProblemSolver[maxThreads];
+    localBasisFunctionsProviders = new LocalBasisFunctionsProvider[maxThreads];
+}
 
-solution = inverseProblemSolver
+for (var i = 0; i < directProblemSolvers.Length; i++)
+{
+    directProblemSolvers[i] = new DirectProblemSolver(trueGrid, trueMaterials)
+        .SetGrid(trueGrid).SetMaterials(trueMaterials);
+    localBasisFunctionsProviders[i] = new LocalBasisFunctionsProvider(trueGrid);
+}
+
+//var resultO = new ResultIO("../InverseProblem/Results/OneSigma/");
+//var gridO = new GridIO("../InverseProblem/Results/8OtherSigmasCloseAndNearToWell/");
+
+var solution = directProblemSolvers[0]
     .SetSource(source)
-    .SetReceivers(receiversLines)
-    .SetParameters(targetParameters, trueValues, initialValues)
-    .SetTruePotentialDifferences(truePotentialDifferences)
-    .SetInitialDirectProblemParameters(rPoints, zPoints, areas, sigmas, firstConditions)
+    .AssembleSLAE()
     .Solve();
 
-foreach (var value in solution)
+for (var i = 0; i < receivers.Length; i++)
 {
-    Console.WriteLine(value);
+    var femSolution = new FEMSolution(trueGrid, solution, localBasisFunctionsProviders[0]);
+
+    trueFieldValues[i] = femSolution.Calculate(receivers[i]) * noises[i];
+
+    Console.Write($"receiver {i}                                                      \r");
 }
+
+//resultO.WriteInverseProblemIteration(receiverLines, truePhaseDifferences, frequencies, "true phase differences.txt");
+//gridO.WriteAreas(trueGrid, trueValues, "true areas.txt");
+
+Console.WriteLine();
+Console.WriteLine("TrueDirectProblem calculated");
+
+var parametersCollections = new ParametersCollection[directProblemSolvers.Length];
+
+for (var i = 0; i < parametersCollections.Length; i++)
+{
+    var materials = new Material[]
+    {
+        new(0.001),
+        new(0.1),
+        new(0.1),
+        new(0.01),
+    };
+
+    parametersCollections[i] = new ParametersCollection(5, materials);
+}
+
+var initialValues = new Vector([0.1]);
+
+var slaeAssembler = new SLAEAssembler(directProblemSolvers, localBasisFunctionsProviders,
+    parametersCollections, source, receivers, targetParameters, initialValues,
+    trueFieldValues);
+
+var gaussElimination = new GaussElimination();
+
+var regularizer = new Regularizer(gaussElimination, targetParameters);
+
+var inverseProblemSolver = new InverseProblemSolver(directProblemSolvers, slaeAssembler, regularizer,
+    gaussElimination, localBasisFunctionsProviders, trueGrid, parametersCollections, source, receivers,
+    targetParameters, trueFieldValues, initialValues);
+
+inverseProblemSolver.Solve();

@@ -2,28 +2,26 @@
 
 public class Matrix
 {
-    private readonly double[,] _values;
+    public double[,] Values { get; }
 
     public Matrix(double[,] matrix)
     {
-        _values = matrix;
+        Values = matrix;
     }
-    public Matrix(int size) : this(new double[size, size]) { }
+    public Matrix(int n) : this(new double[n, n]) { }
 
-    public Matrix(int rows, int columns) : this(new double[rows, columns]) { }
-
-    public int CountRows => _values.GetLength(0);
-    public int CountColumns => _values.GetLength(1);
+    public int CountRows => Values.GetLength(0);
+    public int CountColumns => Values.GetLength(1);
 
     public double this[int i, int j]
     {
-        get => _values[i, j];
-        set => _values[i, j] = value;
+        get => Values[i, j];
+        set => Values[i, j] = value;
     }
 
     public static Matrix Sum(Matrix matrix1, Matrix matrix2, Matrix? result = null)
     {
-        if (matrix1.CountRows != matrix2.CountColumns || matrix1.CountColumns != matrix2.CountRows)
+        if (matrix1.CountRows != matrix2.CountRows || matrix1.CountColumns != matrix2.CountColumns)
             throw new ArgumentOutOfRangeException(
                 $"{nameof(matrix1)} and {nameof(matrix2)} must have same size");
 
@@ -42,7 +40,7 @@ public class Matrix
 
     public static Matrix Multiply(double coefficient, Matrix matrix, Matrix? result = null)
     {
-        result ??= new Matrix(matrix.CountRows, matrix.CountColumns);
+        result ??= new Matrix(matrix.CountRows);
 
         for (var i = 0; i < matrix.CountRows; i++)
         {
@@ -59,14 +57,13 @@ public class Matrix
     {
         if (matrix.CountRows != vector.Count)
             throw new ArgumentOutOfRangeException(
-                $"{nameof(matrix.CountRows)} and {nameof(vector)} must have same size");
+                $"{nameof(matrix)} and {nameof(vector)} must have same size");
 
-        result ??= new Vector(vector.Count);
+        if (result == null) result = new Vector(matrix.CountRows);
+        else result.Clear();
 
         for (var i = 0; i < matrix.CountRows; i++)
         {
-            result[i] = 0d;
-
             for (var j = 0; j < matrix.CountColumns; j++)
             {
                 result[i] += matrix[i, j] * vector[j];
@@ -76,73 +73,30 @@ public class Matrix
         return result;
     }
 
-    public static Span<double> Multiply(Matrix matrix, Span<double> vector, Span<double> result)
+    public static Matrix SumToDiagonal(Matrix matrix, double[] values, Matrix? result = null)
     {
-        if (matrix.CountRows != vector.Length || vector.Length != result.Length)
+        result ??= new Matrix(matrix.CountRows);
+
+        if (matrix.CountRows != values.Length)
             throw new ArgumentOutOfRangeException(
-                $"{nameof(matrix.CountRows)}, {nameof(vector)} and {nameof(result)} must have same size");
+                $"{nameof(matrix)} and {nameof(values)} must have same size");
 
         for (var i = 0; i < matrix.CountRows; i++)
         {
-            for (var j = 0; j < matrix.CountColumns; j++)
-            {
-                result[i] += matrix[i, j] * vector[j];
-            }
+            result[i, i] = matrix[i, i] + values[i];
         }
 
         return result;
-    }
-
-    public void SwapRows(int row1, int row2)
-    {
-        for (var i = 0; i < CountColumns; i++)
-        {
-            (_values[row2, i], _values[row1, i]) = (_values[row1, i], _values[row2, i]);
-        }
-    }
-
-    public Matrix Clone()
-    {
-        var clone = (double[,])_values.Clone();
-
-        return new Matrix(clone);
     }
 
     public Matrix Copy(Matrix matrix)
     {
-        if (matrix.CountRows != CountColumns || matrix.CountColumns != CountRows)
-            throw new ArgumentOutOfRangeException(
-                $"{nameof(_values)} and {nameof(matrix)} must have same size");
-
-        Array.Copy(_values, matrix._values, matrix._values.Length);
-
-        return matrix;
-    }
-
-    public void Clear()
-    {
-        Array.Clear(_values);
-    }
-
-    public static Matrix CreateIdentityMatrix(int size)
-    {
-        var matrix = new Matrix(size);
-
         for (var i = 0; i < matrix.CountRows; i++)
         {
-            matrix[i, i] = 1d;
-        }
-
-        return matrix;
-    }
-
-    public static Matrix CreateIdentityMatrix(Matrix matrix)
-    {
-        matrix.Clear();
-
-        for (var i = 0; i < matrix.CountRows; i++)
-        {
-            matrix[i, i] = 1d;
+            for (var j = 0; j < matrix.CountColumns; j++)
+            {
+                matrix[i, j] = Values[i, j];
+            }
         }
 
         return matrix;

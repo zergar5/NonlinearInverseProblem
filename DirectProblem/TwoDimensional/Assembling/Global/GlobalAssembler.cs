@@ -8,20 +8,25 @@ using DirectProblem.FEM.Assembling;
 using DirectProblem.FEM.Assembling.Global;
 using DirectProblem.FEM.Assembling.Local;
 using DirectProblem.TwoDimensional.Assembling.Local;
+using DirectProblem.TwoDimensional.Assembling.MatrixTemplates;
 
 namespace DirectProblem.TwoDimensional.Assembling.Global;
 
 public class GlobalAssembler<TNode>
 {
+    public const double Delta = 1e-13;
+
     private readonly Grid<Node2D> _grid;
     private readonly IMatrixPortraitBuilder<SymmetricSparseMatrix> _matrixPortraitBuilder;
     private readonly ILocalAssembler _localAssembler;
     private readonly IInserter<SymmetricSparseMatrix> _inserter;
     private readonly IGaussExcluder<SymmetricSparseMatrix> _gaussExcluder;
-    private readonly LocalBasisFunctionsProvider _localBasisFunctionsProvider;
     private Equation<SymmetricSparseMatrix> _equation;
     private SymmetricSparseMatrix _preconditionMatrix;
-    private Vector _bufferVector = new(4);
+    private Matrix _massMatrix = MassMatrixTemplate.MassMatrix;
+    private int[] _indexes = new int[2];
+    private Vector _bufferVector = new(2);
+    private Vector _thetas = new(2);
 
     public GlobalAssembler
     (
@@ -29,8 +34,7 @@ public class GlobalAssembler<TNode>
         IMatrixPortraitBuilder<SymmetricSparseMatrix> matrixPortraitBuilder,
         ILocalAssembler localAssembler,
         IInserter<SymmetricSparseMatrix> inserter,
-        IGaussExcluder<SymmetricSparseMatrix> gaussExcluder,
-        LocalBasisFunctionsProvider localBasisFunctionsProvider
+        IGaussExcluder<SymmetricSparseMatrix> gaussExcluder
     )
     {
         _grid = grid;
@@ -38,7 +42,6 @@ public class GlobalAssembler<TNode>
         _localAssembler = localAssembler;
         _inserter = inserter;
         _gaussExcluder = gaussExcluder;
-        _localBasisFunctionsProvider = localBasisFunctionsProvider;
     }
 
     public GlobalAssembler<TNode> AssembleEquation()
@@ -61,18 +64,10 @@ public class GlobalAssembler<TNode>
         return this;
     }
 
-    public GlobalAssembler<TNode> ApplySource(SourcesLine sources)
+    public GlobalAssembler<TNode> ApplySource(Source source)
     {
-        var element = _grid.Elements.First(x => ElementHas(x, sources.PointA));
-
-        var basisFunctions = _localBasisFunctionsProvider.GetBilinearFunctions(element);
-
-        for (var i = 0; i < element.NodesIndexes.Length; i++)
-        {
-            _bufferVector[i] = sources.Current / (2 * Math.PI) * basisFunctions[i].Calculate(sources.PointA);
-        }
-
-        _inserter.InsertVector(_equation.RightPart, new LocalVector(element.NodesIndexes, _bufferVector));
+        ApplySource(source.StartPoint, source.Current);
+        ApplySource(source.EndPoint, -source.Current);
 
         return this;
     }
@@ -98,11 +93,33 @@ public class GlobalAssembler<TNode>
         return _preconditionMatrix;
     }
 
+    private void ApplySource(Node2D node, double current)
+    {
+        var element = _grid.Elements.First(x => ElementHas(x, node));
+        var (indexes, height) = element.GetBoundNodeIndexes(Bound.Left, _indexes);
+
+        for (var i = 0; i < indexes.Length; i++)
+        {
+            _thetas[i] = current / (2 * Math.PI * node.R);
+        }
+
+        Matrix.Multiply(_massMatrix, _thetas, _bufferVector);
+        Vector.Multiply(height / 6, _bufferVector, _bufferVector);
+
+        _inserter.InsertVector(_equation.RightPart, new LocalVector(element.NodesIndexes, _bufferVector));
+    }
+
     private bool ElementHas(Element element, Node2D node)
     {
         var leftCornerNode = _grid.Nodes[element.NodesIndexes[0]];
         var rightCornerNode = _grid.Nodes[element.NodesIndexes[^1]];
-        return node.R >= leftCornerNode.R && node.Z >= leftCornerNode.Z &&
-               node.R <= rightCornerNode.R && node.Z <= rightCornerNode.Z;
+        return (leftCornerNode.R <= node.R ||
+               Math.Abs(leftCornerNode.R - node.R) < Delta) &&
+               (leftCornerNode.Z <= node.Z ||
+                Math.Abs(leftCornerNode.Z - node.Z) < Delta) &&
+               (rightCornerNode.R >= node.R ||
+                Math.Abs(rightCornerNode.R - node.R) < Delta) &&
+               (rightCornerNode.Z >= node.Z ||
+                Math.Abs(rightCornerNode.Z - node.Z) < Delta);
     }
 }

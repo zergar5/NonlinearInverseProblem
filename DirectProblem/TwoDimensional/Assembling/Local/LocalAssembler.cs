@@ -9,22 +9,29 @@ namespace DirectProblem.TwoDimensional.Assembling.Local;
 public class LocalAssembler : ILocalAssembler
 {
     private readonly ILocalMatrixAssembler _localMatrixAssembler;
-    private readonly MaterialsRepository _materialFactory;
+    private Material[] _materials;
 
     public LocalAssembler
     (
         ILocalMatrixAssembler localMatrixAssembler,
-        MaterialsRepository materialFactory
+        Material[] materials
     )
     {
         _localMatrixAssembler = localMatrixAssembler;
-        _materialFactory = materialFactory;
+        _materials = materials;
+    }
+
+    public LocalAssembler SetMaterials(Material[] materials)
+    {
+        _materials = materials;
+
+        return this;
     }
 
     public LocalMatrix AssembleMatrix(Element element)
     {
         var matrix = GetStiffnessMatrix(element);
-        var sigma = _materialFactory.GetById(element.MaterialId).Sigma;
+        var sigma = _materials[element.MaterialId].Sigma;
 
         return new LocalMatrix(element.NodesIndexes, Matrix.Multiply(sigma, matrix, matrix));
     }

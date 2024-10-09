@@ -3,104 +3,98 @@ using DirectProblem.Core.Base;
 using DirectProblem.Core.Boundary;
 using DirectProblem.Core.Global;
 using DirectProblem.Core.GridComponents;
-using DirectProblem.FEM;
 using DirectProblem.SLAE.Preconditions;
 using DirectProblem.SLAE.Solvers;
 using DirectProblem.TwoDimensional.Assembling;
 using DirectProblem.TwoDimensional.Assembling.Boundary;
 using DirectProblem.TwoDimensional.Assembling.Global;
 using DirectProblem.TwoDimensional.Assembling.Local;
-using DirectProblem.TwoDimensional.Assembling.MatrixTemplates;
-using DirectProblem.TwoDimensional.Parameters;
 
 namespace DirectProblem;
 
 public class DirectProblemSolver
 {
-    private static readonly MatrixPortraitBuilder MatrixPortraitBuilder = new();
-    private static readonly StiffnessMatrixTemplates StiffnessMatrixTemplates = new();
-    private static readonly MassMatrixTemplate MassMatrixTemplate = new();
-    private static readonly Inserter Inserter = new();
-    private static readonly LinearFunctionsProvider LinearFunctionsProvider = new();
-    private static readonly GaussExcluder GaussExcluder = new();
-    private static readonly MCG MCG = new(new LLTPreconditioner(), new LLTSparse());
-    private LocalBasisFunctionsProvider _localBasisFunctionsProvider;
-    private LocalAssembler _localAssembler;
-    private GlobalAssembler<Node2D> _globalAssembler;
-    private FirstBoundaryProvider _firstBoundaryProvider;
+    private readonly MatrixPortraitBuilder _matrixPortraitBuilder;
+    private readonly Inserter _inserter;
+    private readonly GaussExcluder _gaussExcluder;
+    private readonly MCG _MCG;
+
+    private readonly LocalBasisFunctionsProvider _localBasisFunctionsProvider;
+    private readonly LocalMatrixAssembler _localMatrixAssembler;
+    private readonly LocalAssembler _localAssembler;
+    private readonly FirstBoundaryProvider _firstBoundaryProvider;
+    private readonly GlobalAssembler<Node2D> _globalAssembler;
 
     private Grid<Node2D> _grid;
-    private MaterialsRepository _materialRepository;
-    private FirstCondition[] _firstConditions;
-    private SourcesLine _sources;
+    private Source _source;
+    private FirstConditionValue[] _firstConditions;
 
     private Equation<SymmetricSparseMatrix> _equation;
 
+    public DirectProblemSolver(Grid<Node2D> grid, Material[] materials)
+    {
+        _grid = grid;
+
+        _matrixPortraitBuilder = new MatrixPortraitBuilder();
+        _inserter = new Inserter();
+        _gaussExcluder = new GaussExcluder();
+        _MCG = new(new LLTPreconditioner(), new LLTSparse());
+        _localBasisFunctionsProvider = new LocalBasisFunctionsProvider(grid);
+        _localMatrixAssembler = new LocalMatrixAssembler(grid);
+        _localAssembler = new LocalAssembler(_localMatrixAssembler, materials);
+        _firstBoundaryProvider = new FirstBoundaryProvider(grid);
+        _firstConditions = _firstBoundaryProvider.GetConditionsValues(
+            _firstBoundaryProvider.GetConditions(grid.Nodes.RLength - 1, grid.Nodes.ZLength - 1)
+            );
+        _globalAssembler = new GlobalAssembler<Node2D>(grid, _matrixPortraitBuilder,
+            _localAssembler, _inserter, _gaussExcluder);
+    }
 
     public DirectProblemSolver SetGrid(Grid<Node2D> grid)
     {
         _grid = grid;
+        _localBasisFunctionsProvider.SetGrid(grid);
+        _localMatrixAssembler.SetGrid(grid);
+        _firstBoundaryProvider.SetGrid(grid);
+        _firstConditions = _firstBoundaryProvider.GetConditionsValues(
+            _firstBoundaryProvider.GetConditions(grid.Nodes.RLength - 1, grid.Nodes.ZLength - 1)
+        );
+
         return this;
     }
 
-    public DirectProblemSolver SetMaterials(double[] sigmas)
+    public DirectProblemSolver SetMaterials(Material[] materials)
     {
-        _materialRepository = new MaterialsRepository(sigmas);
+        _localAssembler.SetMaterials(materials);
+
         return this;
     }
 
-    public DirectProblemSolver SetSource(SourcesLine sources)
+    public DirectProblemSolver SetSource(Source source)
     {
-        _sources = sources;
+        _source = source;
+
         return this;
     }
 
-    public DirectProblemSolver SetFirstConditions(FirstCondition[] firstConditions)
+    public DirectProblemSolver AssembleSLAE()
     {
-        _firstConditions = firstConditions;
+        _equation = _globalAssembler
+            .AssembleEquation()
+            .ApplySource(_source)
+            .ApplyFirstConditions(_firstConditions)
+            .BuildEquation();
+
         return this;
     }
 
     public Vector Solve()
     {
-        InitLocal();
-        InitGlobal();
-        AssembleEquation();
-        InitPrecondition();
+        var preconditionMatrix = _globalAssembler.AllocatePreconditionMatrix();
+        _MCG.SetPrecondition(preconditionMatrix);
 
-        var solution = MCG.Solve(_equation);
+        var solution = _MCG.Solve(_equation);
 
         return solution;
-    }
-
-    private void InitLocal()
-    {
-        var localMatrixAssembler = new LocalMatrixAssembler(_grid, StiffnessMatrixTemplates, MassMatrixTemplate);
-
-        _localBasisFunctionsProvider = new LocalBasisFunctionsProvider(_grid, LinearFunctionsProvider);
-        _localAssembler = new LocalAssembler(localMatrixAssembler, _materialRepository);
-    }
-
-    private void InitGlobal()
-    {
-        _globalAssembler = new GlobalAssembler<Node2D>(_grid, MatrixPortraitBuilder, _localAssembler, Inserter,
-            GaussExcluder, _localBasisFunctionsProvider);
-
-        _firstBoundaryProvider = new FirstBoundaryProvider(_grid);
-    }
-
-    private void AssembleEquation()
-    {
-        _equation = _globalAssembler
-            .AssembleEquation()
-            .ApplySource(_sources)
-            .ApplyFirstConditions(_firstBoundaryProvider.GetConditionsValues(_firstConditions))
-            .BuildEquation();
-    }
-
-    private void InitPrecondition()
-    {
-        var preconditionMatrix = _globalAssembler.AllocatePreconditionMatrix();
-        MCG.SetPrecondition(preconditionMatrix);
     }
 }

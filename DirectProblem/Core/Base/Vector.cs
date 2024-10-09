@@ -2,30 +2,22 @@
 
 public class Vector
 {
-    private readonly double[] _values;
+    public double[] Values { get; }
 
-    public Vector()
-    {
-        _values = Array.Empty<double>();
-    }
-
-    public Vector(int size)
-    {
-        _values = new double[size];
-    }
-
+    public Vector() : this([]) { }
     public Vector(double[] values)
     {
-        _values = values;
+        Values = values;
     }
+    public Vector(int size) : this(new double[size]) { }
 
     public double this[int index]
     {
-        get => _values[index];
-        set => _values[index] = value;
+        get => Values[index];
+        set => Values[index] = value;
     }
 
-    public int Count => _values.Length;
+    public int Count => Values.Length;
     public double Norm => Math.Sqrt(ScalarProduct(this, this));
 
     public static double ScalarProduct(Vector vector1, Vector vector2)
@@ -45,11 +37,11 @@ public class Vector
 
     public static Vector Sum(Vector vector1, Vector vector2, Vector? result = null)
     {
-        result ??= new Vector(vector1.Count);
-
         if (vector1.Count != vector2.Count)
             throw new ArgumentOutOfRangeException(
-            $"{nameof(vector1)} and {nameof(vector2)} must have same size");
+                $"{nameof(vector1)} and {nameof(vector2)} must have same size");
+
+        result ??= new Vector(vector1.Values);
 
         for (var i = 0; i < vector1.Count; i++)
         {
@@ -65,7 +57,7 @@ public class Vector
 
         if (vector1.Count != vector2.Count)
             throw new ArgumentOutOfRangeException(
-            $"{nameof(vector1)} and {nameof(vector2)} must have same size");
+                $"{nameof(vector1)} and {nameof(vector2)} must have same size");
 
         for (var i = 0; i < vector1.Count; i++)
         {
@@ -77,11 +69,23 @@ public class Vector
 
     public static Vector Multiply(double number, Vector vector, Vector? result = null)
     {
-        result ??= new Vector(vector.Count);
+        result ??= new Vector(vector.Values);
 
         for (var i = 0; i < vector.Count; i++)
         {
-            result[i] = vector[i] * number;
+            result[i] = number * vector[i];
+        }
+
+        return result;
+    }
+
+    public static Vector Multiply(double[] numbers, Vector vector, Vector? result = null)
+    {
+        result ??= new Vector(vector.Values);
+
+        for (var i = 0; i < vector.Count; i++)
+        {
+            result[i] = numbers[i] * vector[i];
         }
 
         return result;
@@ -89,17 +93,17 @@ public class Vector
 
     public void Fill(double value)
     {
-        Array.Fill(_values, value);
+        Array.Fill(Values, value);
     }
 
     public void Clear()
     {
-        Array.Clear(_values);
+        Array.Clear(Values);
     }
 
     public Vector Clone()
     {
-        var clone = (double[])_values.Clone();
+        var clone = (double[])Values.Clone();
 
         return new Vector(clone);
     }
@@ -108,12 +112,12 @@ public class Vector
     {
         if (Count != vector.Count)
             throw new ArgumentOutOfRangeException(
-                $"{nameof(_values)}  and  {nameof(vector)} must have same size");
+                $"{nameof(Values)}  and  {nameof(vector)} must have same size");
 
-        Array.Copy(_values, vector._values, Count);
+        Array.Copy(Values, vector.Values, Count);
 
         return vector;
     }
 
-    public IEnumerator<double> GetEnumerator() => ((IEnumerable<double>)_values).GetEnumerator();
+    public IEnumerator<double> GetEnumerator() => ((IEnumerable<double>)Values).GetEnumerator();
 }

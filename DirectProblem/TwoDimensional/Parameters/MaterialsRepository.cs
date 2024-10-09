@@ -4,18 +4,15 @@ namespace DirectProblem.TwoDimensional.Parameters;
 
 public class MaterialsRepository
 {
-    private readonly Dictionary<int, double> _sigmas;
+    private readonly Material[] _materials;
 
-    public MaterialsRepository(IEnumerable<double> sigmas)
+    public MaterialsRepository(Material[] materials)
     {
-        _sigmas = sigmas.Select((value, index) => new KeyValuePair<int, double>(index, value))
-            .ToDictionary(index => index.Key, value => value.Value);
+        _materials = materials;
     }
 
     public Material GetById(int id)
     {
-        return new Material(
-            _sigmas[id]
-        );
+        return _materials[id];
     }
 }

@@ -18,7 +18,7 @@ public class FEMSolution
         _basisFunctionsProvider = basisFunctionsProvider;
     }
 
-    public double CalculatePotential(Node2D point)
+    public double Calculate(Node2D point)
     {
         if (AreaHas(point))
         {
@@ -45,7 +45,7 @@ public class FEMSolution
 
         for (var i = 0; i < _solution.Count; i++)
         {
-            solution[i] = CalculatePotential(_grid.Nodes[i]);
+            solution[i] = Calculate(_grid.Nodes[i]);
             trueSolution[i] = u(_grid.Nodes[i]);
         }
 

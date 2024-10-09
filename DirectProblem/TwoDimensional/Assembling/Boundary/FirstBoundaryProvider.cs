@@ -8,13 +8,20 @@ namespace DirectProblem.TwoDimensional.Assembling.Boundary;
 
 public class FirstBoundaryProvider
 {
-    private readonly Grid<Node2D> _grid;
+    private Grid<Node2D> _grid;
     private int[][]? _indexes;
     private Vector[]? _values;
 
     public FirstBoundaryProvider(Grid<Node2D> grid)
     {
         _grid = grid;
+    }
+
+    public FirstBoundaryProvider SetGrid(Grid<Node2D> grid)
+    {
+        _grid = grid;
+
+        return this;
     }
 
     public FirstConditionValue[] GetConditionsValues(FirstCondition[] conditions)

@@ -4,8 +4,7 @@ public enum ParameterType
 {
     Current,
     Sigma,
-    VerticalBound,
-    HorizontalBound
+    Position
 }
 
 public readonly record struct Parameter(ParameterType ParameterType, int Index);

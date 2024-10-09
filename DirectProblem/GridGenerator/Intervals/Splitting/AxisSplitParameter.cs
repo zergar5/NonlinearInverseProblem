@@ -19,15 +19,31 @@ public class AxisSplitParameter
         Splitters = splitters;
     }
 
+    public IEnumerable<double> CreateAxis()
+    {
+        foreach (var value in Splitters[0].EnumerateValues(Sections[0]))
+        {
+            yield return value;
+        }
+
+        for (var i = 1; i < Splitters.Length; i++)
+        {
+            foreach (var value in Splitters[i].EnumerateValues(Sections[i]).Skip(1))
+            {
+                yield return value;
+            }
+        }
+    }
+
     private IEnumerable<Interval> GenerateSections(IEnumerable<double> points)
     {
-        var begin = points.First();
+        var left = points.First();
         foreach (var point in points.Skip(1))
         {
             var end = point;
-            yield return new Interval(begin, end);
+            yield return new Interval(left, end);
 
-            begin = end;
+            left = end;
         }
     }
 }

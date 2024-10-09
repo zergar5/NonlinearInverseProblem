@@ -1,3 +1,3 @@
 ﻿namespace DirectProblem.Core.GridComponents;
 
-public readonly record struct Material(double Sigma);
+public record struct Material(double Sigma);

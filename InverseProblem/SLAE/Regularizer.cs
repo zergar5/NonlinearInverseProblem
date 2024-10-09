@@ -1,126 +1,142 @@
 ﻿using DirectProblem.Core.Base;
 using DirectProblem.Core.Global;
+using InverseProblem.Assembling;
 
 namespace InverseProblem.SLAE;
 
 public class Regularizer
 {
     private readonly GaussElimination _gaussElimination;
-    public Matrix BufferMatrix { get; set; }
-    public Vector BufferVector { get; set; }
-    public Vector ResidualBufferVector { get; set; }
+    private readonly Parameter[] _parameters;
+    private readonly double[] _alphas;
+    private readonly Equation<Matrix> _regularizedEquation;
 
-    public Regularizer(GaussElimination gaussElimination)
+    public Regularizer(GaussElimination gaussElimination, Parameter[] parameters)
     {
         _gaussElimination = gaussElimination;
+        _parameters = parameters;
+        _alphas = new double[parameters.Length];
+        _regularizedEquation = new Equation<Matrix>(
+            new Matrix(parameters.Length),
+            new Vector(parameters.Length),
+            new Vector(parameters.Length)
+            );
     }
 
-    public double Regularize(Equation<Matrix> equation, Vector trueCurrents)
+    public Equation<Matrix> Regularize(Equation<Matrix> equation, out double[] alphas)
     {
-        var alpha = CalculateAlpha(equation.Matrix);
+        alphas = SetupAlphas(equation.Matrix);
 
-        alpha = FindPossibleAlpha(equation, alpha, trueCurrents, out var residual);
+        alphas = FindPossibleAlphas(equation, alphas);
 
-        alpha = FindBestAlpha(equation, alpha, trueCurrents, residual);
+        alphas = FindBestAlphas(equation, alphas);
 
-        return alpha;
+        AssembleSLAE(equation, alphas);
+
+        return _regularizedEquation;
     }
 
-    private double CalculateAlpha(Matrix matrix)
+    private double[] SetupAlphas(Matrix matrix)
     {
-        var n = matrix.CountRows;
-        var alpha = 0d;
-
-        for (var i = 0; i < n; i++)
+        for (var i = 0; i < matrix.CountRows; i++)
         {
-            alpha += matrix[i, i];
+            _alphas[i] = matrix[i, i] * 1e-8;
         }
 
-        alpha /= n * 10e14;
-
-        return alpha;
+        return _alphas;
     }
 
-    private void AssembleSLAE(Equation<Matrix> equation, double alpha, Vector trueCurrents)
+    private void AssembleSLAE(Equation<Matrix> equation, double[] alphas)
     {
-        Matrix.CreateIdentityMatrix(BufferMatrix);
+        equation.Matrix.Copy(_regularizedEquation.Matrix);
+        Matrix.SumToDiagonal(equation.Matrix, alphas, _regularizedEquation.Matrix);
 
-        Matrix.Sum(equation.Matrix, Matrix.Multiply(alpha, BufferMatrix, BufferMatrix), BufferMatrix);
-
-        Vector.Subtract(
-            equation.RightPart, Vector.Multiply(
-                alpha, Vector.Subtract(equation.Solution, trueCurrents, BufferVector),
-                BufferVector),
-            BufferVector);
+        equation.RightPart.Copy(_regularizedEquation.RightPart);
     }
 
-    private double CalculateResidual(Equation<Matrix> equation, double alpha, Vector trueCurrents)
-    {
-        Matrix.CreateIdentityMatrix(BufferMatrix);
-
-        Matrix.Sum(equation.Matrix, Matrix.Multiply(alpha, BufferMatrix, BufferMatrix), BufferMatrix);
-
-        Matrix.Multiply(BufferMatrix, BufferVector, ResidualBufferVector);
-
-        Vector.Subtract(
-            equation.RightPart, Vector.Multiply(
-                alpha, Vector.Subtract(equation.Solution, trueCurrents, BufferVector),
-                BufferVector),
-            BufferVector);
-
-        return Vector.Subtract(
-            BufferVector,
-            ResidualBufferVector, BufferVector)
-            .Norm;
-    }
-
-    private double FindPossibleAlpha(Equation<Matrix> equation, double alpha, Vector trueCurrents, out double residual)
+    private double[] FindPossibleAlphas(Equation<Matrix> equation, double[] alphas)
     {
         for (; ; )
         {
             try
             {
-                AssembleSLAE(equation, alpha, trueCurrents);
+                AssembleSLAE(equation, alphas);
 
-                BufferVector = _gaussElimination.Solve(BufferMatrix, BufferVector);
-
-                residual = CalculateResidual(equation, alpha, trueCurrents);
+                _gaussElimination.Solve(_regularizedEquation);
 
                 break;
             }
-            catch { }
-            finally
+            catch
             {
-                alpha *= 1.5;
+                for (var i = 0; i < alphas.Length; i++)
+                {
+                    alphas[i] *= 1.5;
+
+                    Console.Write($"alpha{i} increased to {alphas[i]}                          \r");
+                }
             }
         }
 
-        return alpha;
+        return alphas;
     }
 
-    private double FindBestAlpha(Equation<Matrix> equation, double alpha, Vector trueCurrents, double residual)
+    private double[] FindBestAlphas(Equation<Matrix> equation, double[] alphas)
     {
-        var ratio = 1d;
+        bool stop;
+
+        alphas = ChangeAlphas(equation, alphas, out _);
 
         do
         {
-            try
-            {
-                AssembleSLAE(equation, alpha, trueCurrents);
+            AssembleSLAE(equation, alphas);
 
-                BufferVector = _gaussElimination.Solve(BufferMatrix, BufferVector);
+            _gaussElimination.Solve(_regularizedEquation);
 
-                var currentResidual = CalculateResidual(equation, alpha, trueCurrents);
+            alphas = ChangeAlphas(equation, alphas, out stop);
 
-                ratio = currentResidual / residual;
-            }
-            catch { }
-            finally
-            {
-                alpha *= 1.5;
-            }
-        } while (ratio is <= 2d or >= 3d);
+        } while (!stop);
 
-        return alpha / 1.5;
+        return alphas;
+    }
+
+    private double[] ChangeAlphas(Equation<Matrix> equation, double[] alphas, out bool stop)
+    {
+        stop = true;
+
+        Vector.Sum(equation.Solution, _regularizedEquation.Solution,
+            _regularizedEquation.Solution);
+
+        for (var i = 0; i < alphas.Length; i++)
+        {
+            var changeRatio = equation.Solution[i] / _regularizedEquation.Solution[i];
+
+            if (CheckLocalConstraints(changeRatio) &&
+                CheckGlobalConstraints(_parameters[i], _regularizedEquation.Solution[i])) continue;
+
+            //Console.Write("constraints not passed                          \r");
+
+            alphas[i] *= 1.5;
+
+            //Console.Write($"alpha{i} increased to {alphas[i]}                          \r");
+
+            stop = false;
+        }
+
+        return alphas;
+    }
+
+    private bool CheckLocalConstraints(double changeRatio)
+    {
+        return !(double.Max(1 / changeRatio, changeRatio) > 2d);
+    }
+
+    private bool CheckGlobalConstraints(Parameter parameter, double parameterValue)
+    {
+        return parameter.ParameterType switch
+        {
+            ParameterType.Current => parameterValue is >= 1d and <= 10d,
+            ParameterType.Sigma => parameterValue is >= 0.001d and <= 10d,
+            _ => false
+        };
     }
 }

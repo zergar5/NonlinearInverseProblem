@@ -1,16 +1,17 @@
 ﻿using DirectProblem.Core.Base;
+using DirectProblem.Core.Global;
 using DirectProblem.SLAE;
 
 namespace InverseProblem.SLAE;
 
 public class GaussElimination
 {
-    public Vector Solve(Matrix matrix, Vector rightPart)
+    public Vector Solve(Equation<Matrix> equation)
     {
         try
         {
-            ForwardElimination(matrix, rightPart);
-            return BackSubstitution(matrix, rightPart);
+            ForwardElimination(equation);
+            return BackSubstitution(equation);
         }
         catch (Exception)
         {
@@ -18,39 +19,45 @@ public class GaussElimination
         }
     }
 
-    private void ForwardElimination(Matrix matrix, Vector rightPart)
+    private void ForwardElimination(Equation<Matrix> equation)
     {
-        for (var i = 0; i < matrix.CountRows - 1; i++)
+        for (var i = 0; i < equation.Matrix.CountRows - 1; i++)
         {
-            var max = Math.Abs(matrix[i, i]);
+            var max = Math.Abs(equation.Matrix[i, i]);
 
             var rowNumber = i;
 
-            for (var j = i + 1; j < matrix.CountRows; j++)
+            for (var j = i + 1; j < equation.Matrix.CountRows; j++)
             {
-                if (max < Math.Abs(matrix[j, i]))
+                if (max < Math.Abs(equation.Matrix[j, i]))
                 {
-                    max = Math.Abs(matrix[j, i]);
+                    max = Math.Abs(equation.Matrix[j, i]);
                     rowNumber = j;
                 }
             }
             if (rowNumber != i)
             {
-                matrix.SwapRows(i, rowNumber);
-                (rightPart[i], rightPart[rowNumber]) = (rightPart[rowNumber], rightPart[i]);
+                for (var j = 0; j < equation.Matrix.CountColumns; j++)
+                {
+                    (equation.Matrix[rowNumber, j], equation.Matrix[i, j]) =
+                        (equation.Matrix[i, j], equation.Matrix[rowNumber, j]);
+                }
+
+                (equation.RightPart[i], equation.RightPart[rowNumber]) =
+                    (equation.RightPart[rowNumber], equation.RightPart[i]);
             }
 
-            if (Math.Abs(matrix[i, i]) > MethodsConfig.Eps)
+            if (Math.Abs(equation.Matrix[i, i]) > MethodsConfig.EpsDouble)
             {
-                for (var j = i + 1; j < matrix.CountRows; j++)
+                for (var j = i + 1; j < equation.Matrix.CountRows; j++)
                 {
-                    var coefficient = matrix[j, i] / matrix[i, i];
-                    matrix[j, i] = 0d;
-                    rightPart[j] -= coefficient * rightPart[i];
+                    var coefficient = equation.Matrix[j, i] / equation.Matrix[i, i];
+                    equation.Matrix[j, i] = 0d;
+                    equation.RightPart[j] -= coefficient * equation.RightPart[i];
 
-                    for (var k = i + 1; k < matrix.CountRows; k++)
+                    for (var k = i + 1; k < equation.Matrix.CountRows; k++)
                     {
-                        matrix[j, k] -= coefficient * matrix[i, k];
+                        equation.Matrix[j, k] -= coefficient * equation.Matrix[i, k];
                     }
                 }
             }
@@ -58,23 +65,22 @@ public class GaussElimination
         }
     }
 
-    private Vector BackSubstitution(Matrix matrix, Vector rightPart)
+    private Vector BackSubstitution(Equation<Matrix> equation)
     {
-        var result = rightPart;
-
-        for (var i = matrix.CountRows - 1; i >= 0; i--)
+        for (var i = equation.Matrix.CountRows - 1; i >= 0; i--)
         {
             var sum = 0d;
 
-            for (var j = i + 1; j < matrix.CountRows; j++)
+            for (var j = i + 1; j < equation.Matrix.CountRows; j++)
             {
-                sum += matrix[i, j] * result[j];
+                sum += equation.Matrix[i, j] * equation.Solution[j];
             }
 
-            if (Math.Abs(matrix[i, i]) > MethodsConfig.Eps) result[i] = (rightPart[i] - sum) / matrix[i, i];
+            if (Math.Abs(equation.Matrix[i, i]) > MethodsConfig.EpsDouble)
+                equation.Solution[i] = (equation.RightPart[i] - sum) / equation.Matrix[i, i];
             else throw new DivideByZeroException();
         }
 
-        return result;
+        return equation.Solution;
     }
 }

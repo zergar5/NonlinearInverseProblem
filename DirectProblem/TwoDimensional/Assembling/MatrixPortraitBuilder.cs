@@ -28,7 +28,7 @@ public class MatrixPortraitBuilder : IMatrixPortraitBuilder<SymmetricSparseMatri
 
         for (var i = 0; i < grid.Nodes.Length; i++)
         {
-            _adjacencyList.Add(new SortedSet<int>());
+            _adjacencyList.Add([]);
         }
 
         foreach (var element in grid)
