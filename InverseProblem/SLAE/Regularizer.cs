@@ -27,9 +27,9 @@ public class Regularizer
     {
         alphas = SetupAlphas(equation.Matrix);
 
-        alphas = FindPossibleAlphas(equation, alphas);
+        //alphas = FindPossibleAlphas(equation, alphas);
 
-        alphas = FindBestAlphas(equation, alphas);
+        //alphas = FindBestAlphas(equation, alphas);
 
         AssembleSLAE(equation, alphas);
 
@@ -40,7 +40,7 @@ public class Regularizer
     {
         for (var i = 0; i < matrix.CountRows; i++)
         {
-            _alphas[i] = matrix[i, i] * 1e-8;
+            _alphas[i] = matrix[i, i] * 0;
         }
 
         return _alphas;
@@ -113,11 +113,7 @@ public class Regularizer
             if (CheckLocalConstraints(changeRatio) &&
                 CheckGlobalConstraints(_parameters[i], _regularizedEquation.Solution[i])) continue;
 
-            //Console.Write("constraints not passed                          \r");
-
             alphas[i] *= 1.5;
-
-            //Console.Write($"alpha{i} increased to {alphas[i]}                          \r");
 
             stop = false;
         }

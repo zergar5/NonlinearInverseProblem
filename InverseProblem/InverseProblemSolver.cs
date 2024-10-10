@@ -86,12 +86,7 @@ public class InverseProblemSolver
 
         _slaeAssembler.SetGrid(_grid);
 
-        //var resultO = new ResultIO("../InverseProblem/Results/8OtherSigmasCloseAndNearToWell/");
-        //var gridO = new GridIO("../InverseProblem/Results/8OtherSigmasCloseAndNearToWell/");
-
         CalculateFieldValues();
-        //resultO.WriteInverseProblemIteration(_receiverLines, _currentFieldValues, _frequencies, "iteration 0 phase differences.txt");
-        //gridO.WriteAreas(_grid, _initialParameterValues, "iteration 0 areas.txt");
 
         Console.WriteLine($"Iteration: 0");
         for (var j = 0; j < _initialParameterValues.Count; j++)
@@ -187,7 +182,7 @@ public class InverseProblemSolver
 
             _currentFieldValues[i] = field;
 
-            //Console.Write($"receiver {i}                                     \r");
+            Console.Write($"receiver {i}                                     \r");
         }
 
         Console.WriteLine();

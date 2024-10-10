@@ -6,7 +6,6 @@ using DirectProblem.TwoDimensional.Assembling.Local;
 using InverseProblem;
 using InverseProblem.Assembling;
 using InverseProblem.SLAE;
-using System.Diagnostics;
 using System.Globalization;
 using DirectProblem.GridGenerator.Intervals.Splitting;
 using Vector = DirectProblem.Core.Base.Vector;
@@ -50,15 +49,15 @@ var trueMaterials = new Material[]
 };
 
 var source = new Source(new Node2D(1e-4d, 0d), new Node2D(10d, 0d), trueCurrent);
-var receivers = new Node2D[2];
+var receivers = new Node2D[3];
 var trueFieldValues = new double[receivers.Length];
 var noises = new double[receivers.Length];
 receivers[0] = new Node2D(30d, 0d);
 receivers[1] = new Node2D(60d, 0d);
-//receivers[2] = new Node2D(100d, 0d);
-noises[0] = 0.99d;
+receivers[2] = new Node2D(100d, 0d);
+noises[0] = 1.05d;
 noises[1] = 1d;
-//noises[2] = 1d;
+noises[2] = 1d;
 
 var maxThreads = 1;
 
@@ -89,9 +88,6 @@ for (var i = 0; i < directProblemSolvers.Length; i++)
     localBasisFunctionsProviders[i] = new LocalBasisFunctionsProvider(trueGrid);
 }
 
-//var resultO = new ResultIO("../InverseProblem/Results/OneSigma/");
-//var gridO = new GridIO("../InverseProblem/Results/8OtherSigmasCloseAndNearToWell/");
-
 var solution = directProblemSolvers[0]
     .SetSource(source)
     .AssembleSLAE()
@@ -106,9 +102,6 @@ for (var i = 0; i < receivers.Length; i++)
     Console.Write($"receiver {i}                                                      \r");
 }
 
-//resultO.WriteInverseProblemIteration(receiverLines, truePhaseDifferences, frequencies, "true phase differences.txt");
-//gridO.WriteAreas(trueGrid, trueValues, "true areas.txt");
-
 Console.WriteLine();
 Console.WriteLine("TrueDirectProblem calculated");
 
@@ -120,14 +113,14 @@ for (var i = 0; i < parametersCollections.Length; i++)
     {
         new(0.001),
         new(0.1),
-        new(0.1),
+        new(0.001),
         new(0.01),
     };
 
     parametersCollections[i] = new ParametersCollection(5, materials);
 }
 
-var initialValues = new Vector([0.1]);
+var initialValues = new Vector([0.001]);
 
 var slaeAssembler = new SLAEAssembler(directProblemSolvers, localBasisFunctionsProviders,
     parametersCollections, source, receivers, targetParameters, initialValues,

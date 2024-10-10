@@ -204,10 +204,7 @@ public class SLAEAssembler
         {
             var field = femSolution.Calculate(_receivers[i]);
 
-            _fieldValuesDerivatives[parameterIndex, i] = field;
-
-            _fieldValuesDerivatives[parameterIndex, i] =
-                (_fieldValuesDerivatives[parameterIndex, i] - _fieldValues[i]) / delta;
+            _fieldValuesDerivatives[parameterIndex, i] = (field - _fieldValues[i]) / delta;
 
             //Console.Write($"derivative {parameterIndex} receiver {i}                              \r");
         }
